@@ -70,7 +70,7 @@
 
         <div class="ab-chat-context">
           <div class="ab-chat-context-line">
-            Chat loaded. Context sent from host page.
+            Assistant is ready.
           </div>
           <div class="ab-chat-context-line">
             ${escapeHtml_(formatContextLine_(cfg))}
