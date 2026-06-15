@@ -1,6 +1,11 @@
 (function () {
   const ABChatbot = {};
-  debugger;
+
+  const DEFAULT_WELCOME_TEXT =
+    "Hello. I can help with punch issues, location, face verification, OTP, regularisation, and subscription/payment questions.";
+
+  const READY_TEXT =
+    "Context received from host app. You can now ask your support question.";
 
   ABChatbot.mount = function (selectorOrElement, options) {
     const root =
@@ -16,6 +21,7 @@
 
     const state = {
       gasUrl: cfg.gasUrl,
+      token: cfg.token || "",
       orgId: cfg.orgId,
       userId: cfg.userId,
       userName: cfg.userName,
@@ -24,7 +30,9 @@
       history: [],
       selectedChunks: [],
       lastMatches: [],
-      isAsking: false
+      isAsking: false,
+      suggestionsCollapsed: false,
+      hasShownReadyMessage: false
     };
 
     renderShell_(root, cfg);
@@ -33,31 +41,16 @@
   };
 
   async function init_(root, state) {
-    try {
-      const response = await callGas_(state.gasUrl, {
-        action: "init",
-        orgId: state.orgId,
-        userId: state.userId,
-        userName: state.userName,
-        userEmail: state.userEmail,
-        contexts: state.contexts
-      });
-
-      if (!response.ok) {
-        addBotMessage_(root, response.error || "Chat initialization failed.", true);
-        return;
-      }
-
-      state.token = response.token || "";
-
-      addBotMessage_(
-        root,
-        "Context received from host app. You can now ask your support question."
-      );
-
-    } catch (err) {
-      addBotMessage_(root, err.message || String(err), true);
+    if (state.token) {
+      showReadyMessageOnce_(root, state);
+      return;
     }
+
+    addBotMessage_(
+      root,
+      "Chat session could not be initialized. Missing bootstrap token.",
+      true
+    );
   }
 
   function renderShell_(root, cfg) {
@@ -65,28 +58,39 @@
       <div class="ab-chat-widget">
         <div class="ab-chat-header">
           <div class="ab-chat-title">${escapeHtml_(cfg.title || "Support Assistant")}</div>
-          <button class="ab-chat-close" type="button" data-ab-close>×</button>
+
+          <div class="ab-chat-actions">
+            <button class="ab-chat-clear" type="button" data-ab-clear aria-label="Clear chat">
+              Clear
+            </button>
+            <button class="ab-chat-close" type="button" data-ab-close aria-label="Close support assistant">
+              ×
+            </button>
+          </div>
         </div>
 
         <div class="ab-chat-context">
           <div class="ab-chat-context-line">
-            Assistant is ready.
+            Chat loaded. Context sent from host page.
           </div>
           <div class="ab-chat-context-line">
             ${escapeHtml_(formatContextLine_(cfg))}
           </div>
         </div>
 
-        <div class="ab-suggested-row" data-ab-suggestions>
-          ${renderSuggestionChips_(cfg.suggestions)}
+        <div class="ab-suggestions-panel" data-ab-suggestions-panel>
+          <button class="ab-suggestions-toggle" type="button" data-ab-toggle-suggestions>
+            <span>Suggested questions</span>
+            <span data-ab-suggestions-icon>⌃</span>
+          </button>
+
+          <div class="ab-suggested-row" data-ab-suggestions>
+            ${renderSuggestionChips_(cfg.suggestions)}
+          </div>
         </div>
 
         <div class="ab-chat-body" data-ab-body>
-          <div class="ab-message-row bot">
-            <div class="ab-bubble">
-              Hello. Ask your question and I will show the closest help topics.
-            </div>
-          </div>
+          ${renderDefaultBanner_()}
         </div>
 
         <div class="ab-chat-footer">
@@ -99,6 +103,16 @@
           <button class="ab-send-button" type="button" data-ab-send>
             ${escapeHtml_(cfg.sendLabel || "Send")}
           </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderDefaultBanner_() {
+    return `
+      <div class="ab-message-row bot" data-ab-default-banner>
+        <div class="ab-bubble">
+          ${escapeHtml_(DEFAULT_WELCOME_TEXT)}
         </div>
       </div>
     `;
@@ -146,12 +160,87 @@
       });
     });
 
+    const toggleSuggestions = root.querySelector("[data-ab-toggle-suggestions]");
+    const suggestionsPanel = root.querySelector("[data-ab-suggestions-panel]");
+    const suggestionsIcon = root.querySelector("[data-ab-suggestions-icon]");
+
+    if (toggleSuggestions && suggestionsPanel) {
+      toggleSuggestions.addEventListener("click", function () {
+        state.suggestionsCollapsed = !state.suggestionsCollapsed;
+
+        suggestionsPanel.classList.toggle(
+          "ab-suggestions-collapsed",
+          state.suggestionsCollapsed
+        );
+
+        if (suggestionsIcon) {
+          suggestionsIcon.textContent = state.suggestionsCollapsed ? "⌄" : "⌃";
+        }
+      });
+    }
+
+    const clear = root.querySelector("[data-ab-clear]");
+    if (clear) {
+      clear.addEventListener("click", function () {
+        resetChat_(root, state);
+      });
+    }
+
     const close = root.querySelector("[data-ab-close]");
     if (close) {
       close.addEventListener("click", function () {
-        root.classList.add("ab-hidden");
+        try {
+          window.parent.postMessage({
+            source: "AB_CHATBOT",
+            type: "close"
+          }, "*");
+        } catch (err) {}
+
+        /*
+          Do not destroy the iframe or chatbot DOM.
+          Parent loader should only hide the floating panel.
+        */
       });
     }
+  }
+
+  function resetChat_(root, state) {
+    const body = root.querySelector("[data-ab-body]");
+
+    state.history = [];
+    state.selectedChunks = [];
+    state.lastMatches = [];
+    state.isAsking = false;
+    state.hasShownReadyMessage = false;
+
+    body.innerHTML = renderDefaultBanner_();
+
+    showReadyMessageOnce_(root, state);
+    scrollBottom_(root);
+
+    const input = root.querySelector("[data-ab-input]");
+    const send = root.querySelector("[data-ab-send]");
+
+    if (input) {
+      input.disabled = false;
+      input.value = "";
+      input.focus();
+    }
+
+    if (send) {
+      send.disabled = false;
+    }
+  }
+
+  function showReadyMessageOnce_(root, state) {
+    if (state.hasShownReadyMessage) return;
+
+    state.hasShownReadyMessage = true;
+
+    addBotMessage_(
+      root,
+      READY_TEXT
+    );
   }
 
   async function ask_(root, state) {
@@ -169,6 +258,11 @@
     input.value = "";
 
     addUserMessage_(root, question);
+
+    state.history.push({
+      role: "user",
+      text: question
+    });
 
     const loaderId = addLoader_(root, "Finding the closest help topics");
 
@@ -284,7 +378,8 @@
     state.selectedChunks.push({
       chunk_id: item.chunk_id || "",
       title: title,
-      content: content
+      content: content,
+      score: item.score || ""
     });
 
     state.history.push({
@@ -326,10 +421,19 @@
         return;
       }
 
+      const issueText = response.issueKey || "Support ticket";
+
       addBotMessage_(
         root,
-        "Ticket created: " + (response.issueKey || "Support ticket")
+        "Ticket created: " + issueText
       );
+
+      if (response.issueUrl) {
+        addBotMessage_(
+          root,
+          "Our support team can now review the request."
+        );
+      }
 
     } catch (err) {
       removeLoader_(root, loaderId);
@@ -509,6 +613,7 @@
   function normalizeConfig_(root, options) {
     return {
       gasUrl: options.gasUrl || root.getAttribute("data-gas-url") || "",
+      token: options.token || root.getAttribute("data-token") || "",
       orgId: options.orgId || root.getAttribute("data-org-id") || "",
       userId: options.userId || root.getAttribute("data-user-id") || "",
       userName: options.userName || root.getAttribute("data-user-name") || "",
@@ -525,7 +630,12 @@
     const parts = [];
 
     if (cfg.orgId) parts.push(cfg.orgId);
-    if (cfg.contexts) parts.push(cfg.contexts);
+
+    if (Array.isArray(cfg.contexts)) {
+      if (cfg.contexts.length) parts.push(cfg.contexts.join(", "));
+    } else if (cfg.contexts) {
+      parts.push(cfg.contexts);
+    }
 
     return parts.join(" • ");
   }
