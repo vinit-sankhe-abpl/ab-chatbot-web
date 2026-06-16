@@ -71,11 +71,14 @@
 
         <div class="ab-chat-context">
           <div class="ab-chat-context-line">
-            Chat loaded. Context sent from host page.
+            Chatbot loaded for ${escapeHtml_(cfg.userName || cfg.userEmail || "user")}
           </div>
-          <div class="ab-chat-context-line">
-            ${escapeHtml_(formatContextLine_(cfg))}
-          </div>
+          ${cfg.orgId 
+            ? 
+            `<div class="ab-chat-context-line">
+              Organization: ${escapeHtml_(cfg.orgId)}
+            </div>` 
+            : ""}          
         </div>
 
         <div class="ab-suggestions-panel" data-ab-suggestions-panel>
@@ -122,6 +125,8 @@
     const list = Array.isArray(suggestions) && suggestions.length
       ? suggestions
       : [
+          "Know more about the Ander Baher Attendance experience",
+          "How to use the Ander Baher Attendance app?",
           "I cannot punch in",
           "It says I am outside location",
           "My face verification is failing",
@@ -243,6 +248,18 @@
     );
   }
 
+  function addBotHtmlMessage_(root, html, isError) {
+    const body = root.querySelector("[data-ab-body]");
+
+    body.insertAdjacentHTML("beforeend", `
+      <div class="ab-message-row bot ${isError ? "error" : ""}">
+        <div class="ab-bubble">${html}</div>
+      </div>
+    `);
+
+    scrollBottom_(root);
+  }
+
   async function ask_(root, state) {
     if (state.isAsking) return;
 
@@ -296,7 +313,7 @@
         return;
       }
 
-      addBotMessage_(root, "Choose the closest matching topic:");
+      addBotHtmlMessage_(root, "<strong>Choose the closest matching topic:<strong>");
       renderMatchChips_(root, state, matches);
 
     } catch (err) {
