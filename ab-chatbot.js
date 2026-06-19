@@ -5,7 +5,7 @@
     "Hello. I can help with punch issues, location, face verification, OTP, regularisation, and subscription/payment questions.";
 
   const READY_TEXT =
-    "Context received from host app. You can now ask your support question.";
+    "I am now ready to guide you with your questions.";
 
   ABChatbot.mount = function (selectorOrElement, options) {
     const root =
@@ -73,12 +73,13 @@
           <div class="ab-chat-context-line">
             Chatbot loaded for ${escapeHtml_(cfg.userName || cfg.userEmail || "user")}
           </div>
-          ${cfg.orgId 
-            ? 
-            `<div class="ab-chat-context-line">
-              Organization: ${escapeHtml_(cfg.orgId)}
-            </div>` 
-            : ""}          
+          ${
+            cfg.orgId
+              ? `<div class="ab-chat-context-line">
+                  Organization: ${escapeHtml_(cfg.orgId)}
+                </div>`
+              : ""
+          }
         </div>
 
         <div class="ab-suggestions-panel" data-ab-suggestions-panel>
@@ -122,26 +123,29 @@
   }
 
   function renderSuggestionChips_(suggestions) {
-    const list = Array.isArray(suggestions) && suggestions.length
-      ? suggestions
-      : [
-          "Know more about the Ander Baher Attendance experience",
-          "How to use the Ander Baher Attendance app?",
-          "I cannot punch in",
-          "It says I am outside location",
-          "My face verification is failing",
-          "I did not receive OTP",
-          "How do I regularise attendance?",
-          "Payment done but subscription not updated"
-        ];
+    const list =
+      Array.isArray(suggestions) && suggestions.length
+        ? suggestions
+        : [
+            "Know more about the Ander Baher Attendance experience",
+            "How to use the Ander Baher Attendance app?",
+            "I cannot punch in",
+            "It says I am outside location",
+            "My face verification is failing",
+            "I did not receive OTP",
+            "How do I regularise attendance?",
+            "Payment done but subscription not updated"
+          ];
 
-    return list.map(function (text) {
-      return `
-        <button class="ab-suggestion-chip" type="button" data-ab-suggestion="${escapeAttr_(text)}">
-          ${escapeHtml_(text)}
-        </button>
-      `;
-    }).join("");
+    return list
+      .map(function (text) {
+        return `
+          <button class="ab-suggestion-chip" type="button" data-ab-suggestion="${escapeAttr_(text)}">
+            ${escapeHtml_(text)}
+          </button>
+        `;
+      })
+      .join("");
   }
 
   function bindEvents_(root, state) {
@@ -195,10 +199,13 @@
     if (close) {
       close.addEventListener("click", function () {
         try {
-          window.parent.postMessage({
-            source: "AB_CHATBOT",
-            type: "close"
-          }, "*");
+          window.parent.postMessage(
+            {
+              source: "AB_CHATBOT",
+              type: "close"
+            },
+            "*"
+          );
         } catch (err) {}
 
         /*
@@ -242,20 +249,20 @@
 
     state.hasShownReadyMessage = true;
 
-    addBotMessage_(
-      root,
-      READY_TEXT
-    );
+    addBotMessage_(root, READY_TEXT);
   }
 
   function addBotHtmlMessage_(root, html, isError) {
     const body = root.querySelector("[data-ab-body]");
 
-    body.insertAdjacentHTML("beforeend", `
+    body.insertAdjacentHTML(
+      "beforeend",
+      `
       <div class="ab-message-row bot ${isError ? "error" : ""}">
         <div class="ab-bubble">${html}</div>
       </div>
-    `);
+    `
+    );
 
     scrollBottom_(root);
   }
@@ -302,24 +309,29 @@
         return;
       }
 
+      if (typeof response.score === "number") {
+        alert("Best matching score: " + response.score);
+      }
+
       const matches = Array.isArray(response.matches) ? response.matches : [];
+      const actionChip = response.actionChip || response.ticketChip || null;
 
       if (!matches.length) {
         addBotMessage_(
           root,
-          "I could not find an exact answer. Please try rephrasing your question or raise a support ticket."
+          response.answer ||
+            "The bot could not find matching topic to your question. Kindly consult with your organization admin."
         );
-        renderTicketOnly_(root, state);
+
+        renderActionOnly_(root, state, actionChip);
         return;
       }
 
-      addBotHtmlMessage_(root, "<strong>Choose the closest matching topic:<strong>");
-      renderMatchChips_(root, state, matches);
-
+      addBotHtmlMessage_(root, "<strong>Choose the closest matching topic:</strong>");
+      renderMatchChips_(root, state, matches, actionChip);
     } catch (err) {
       removeLoader_(root, loaderId);
       addBotMessage_(root, err.message || String(err), true);
-
     } finally {
       state.isAsking = false;
       send.disabled = false;
@@ -328,26 +340,25 @@
     }
   }
 
-  function renderMatchChips_(root, state, matches) {
+  function renderMatchChips_(root, state, matches, actionChip) {
     const body = root.querySelector("[data-ab-body]");
     state.lastMatches = matches;
 
-    const chips = matches.map(function (item, index) {
-      return `
-        <button class="ab-match-chip" type="button" data-ab-match="${index}">
-          ${escapeHtml_(item.title || item.subchunk_name || item.chunk_name || "Topic")}
-        </button>
-      `;
-    }).join("");
+    const chips = matches
+      .map(function (item, index) {
+        return `
+          <button class="ab-match-chip" type="button" data-ab-match="${index}">
+            ${escapeHtml_(item.title || item.subchunk_name || item.chunk_name || "Topic")}
+          </button>
+        `;
+      })
+      .join("");
+
+    const actionHtml = renderActionChipHtml_(actionChip);
 
     const row = document.createElement("div");
     row.className = "ab-match-row";
-    row.innerHTML = `
-      ${chips}
-      <button class="ab-ticket-chip" type="button" data-ab-ticket>
-        Raise ticket
-      </button>
-    `;
+    row.innerHTML = chips + actionHtml;
 
     body.appendChild(row);
 
@@ -358,31 +369,152 @@
       });
     });
 
-    row.querySelector("[data-ab-ticket]").addEventListener("click", function () {
-      raiseTicket_(root, state);
-    });
+    bindActionChip_(row, root, state, actionChip);
 
     scrollBottom_(root);
   }
 
-  function renderTicketOnly_(root, state) {
+  function renderActionOnly_(root, state, actionChip) {
     const body = root.querySelector("[data-ab-body]");
     const row = document.createElement("div");
 
     row.className = "ab-match-row";
-    row.innerHTML = `
-      <button class="ab-ticket-chip" type="button" data-ab-ticket>
-        Raise ticket
-      </button>
-    `;
+    row.innerHTML = renderActionChipHtml_(actionChip);
 
     body.appendChild(row);
 
-    row.querySelector("[data-ab-ticket]").addEventListener("click", function () {
-      raiseTicket_(root, state);
-    });
+    bindActionChip_(row, root, state, actionChip);
 
     scrollBottom_(root);
+  }
+
+  function renderActionChipHtml_(actionChip) {
+    if (!actionChip) {
+      return "";
+    }
+
+    const label = actionChip.label || "Raise a ticket";
+    const type = actionChip.type || "ticket";
+
+    if (type === "sales") {
+      return `
+        <button class="ab-ticket-chip ab-sales-chip" type="button" data-ab-sales>
+          ${escapeHtml_(label)}
+        </button>
+      `;
+    }
+
+    return `
+      <button class="ab-ticket-chip" type="button" data-ab-ticket>
+        ${escapeHtml_(label)}
+      </button>
+    `;
+  }
+
+  function bindActionChip_(row, root, state, actionChip) {
+    if (!actionChip) {
+      return;
+    }
+
+    if (actionChip.type === "sales") {
+      const sales = row.querySelector("[data-ab-sales]");
+
+      if (sales) {
+        sales.addEventListener("click", function () {
+          renderSalesActions_(root, actionChip);
+        });
+      }
+
+      return;
+    }
+
+    /*
+      Existing support flow remains unchanged.
+      Ticket chips still call the GAS ticket action through raiseTicket_().
+    */
+    const ticket = row.querySelector("[data-ab-ticket]");
+
+    if (ticket) {
+      ticket.addEventListener("click", function () {
+        raiseTicket_(root, state);
+      });
+    }
+  }
+
+  function renderSalesActions_(root, actionChip) {
+    const actions = Array.isArray(actionChip.actions) ? actionChip.actions : [];
+
+    const message =
+      actionChip.message ||
+      "Please contact Ander Baher sales for onboarding, pricing, payment, or package-related help.";
+
+    if (!actions.length) {
+      addBotMessage_(root, message);
+      return;
+    }
+
+    const linksHtml = actions
+      .map(function (item) {
+        const label = item.label || item.type || "Open";
+        const type = String(item.type || "link").trim().toLowerCase();
+        const url = String(item.url || "").trim();
+
+        if (!url || !isAllowedActionUrl_(url)) {
+          return "";
+        }
+
+        return `
+          <a
+            class="ab-action-link ab-action-link-${escapeAttr_(type)}"
+            href="${escapeAttr_(url)}"
+            target="${getActionTarget_(url)}"
+            rel="noopener"
+          >
+            ${escapeHtml_(label)}
+          </a>
+        `;
+      })
+      .join("");
+
+    if (!linksHtml.trim()) {
+      addBotMessage_(root, message);
+      return;
+    }
+
+    addBotHtmlMessage_(
+      root,
+      `
+        <div class="ab-sales-actions">
+          <div class="ab-sales-message">${escapeHtml_(message)}</div>
+          <div class="ab-sales-action-row">
+            ${linksHtml}
+          </div>
+        </div>
+      `
+    );
+  }
+
+  function isAllowedActionUrl_(url) {
+    url = String(url || "").trim().toLowerCase();
+
+    return (
+      url.indexOf("tel:") === 0 ||
+      url.indexOf("mailto:") === 0 ||
+      url.indexOf("https://wa.me/") === 0 ||
+      url.indexOf("https://api.whatsapp.com/") === 0 ||
+      url.indexOf("https://") === 0 ||
+      url.indexOf("http://") === 0
+    );
+  }
+
+  function getActionTarget_(url) {
+    url = String(url || "").trim().toLowerCase();
+
+    if (url.indexOf("http://") === 0 || url.indexOf("https://") === 0) {
+      return "_blank";
+    }
+
+    return "_self";
   }
 
   function showChunk_(root, state, item) {
@@ -440,18 +572,11 @@
 
       const issueText = response.issueKey || "Support ticket";
 
-      addBotMessage_(
-        root,
-        "Ticket created: " + issueText
-      );
+      addBotMessage_(root, "Ticket created: " + issueText);
 
       if (response.issueUrl) {
-        addBotMessage_(
-          root,
-          "Our support team can now review the request."
-        );
+        addBotMessage_(root, "Our support team can now review the request.");
       }
-
     } catch (err) {
       removeLoader_(root, loaderId);
       addBotMessage_(root, err.message || String(err), true);
@@ -480,11 +605,14 @@
   function addUserMessage_(root, text) {
     const body = root.querySelector("[data-ab-body]");
 
-    body.insertAdjacentHTML("beforeend", `
+    body.insertAdjacentHTML(
+      "beforeend",
+      `
       <div class="ab-message-row user">
         <div class="ab-bubble">${escapeHtml_(text)}</div>
       </div>
-    `);
+    `
+    );
 
     scrollBottom_(root);
   }
@@ -492,11 +620,14 @@
   function addBotMessage_(root, text, isError) {
     const body = root.querySelector("[data-ab-body]");
 
-    body.insertAdjacentHTML("beforeend", `
+    body.insertAdjacentHTML(
+      "beforeend",
+      `
       <div class="ab-message-row bot ${isError ? "error" : ""}">
         <div class="ab-bubble">${escapeHtml_(text)}</div>
       </div>
-    `);
+    `
+    );
 
     scrollBottom_(root);
   }
@@ -505,7 +636,9 @@
     const body = root.querySelector("[data-ab-body]");
     const id = "loader_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
 
-    body.insertAdjacentHTML("beforeend", `
+    body.insertAdjacentHTML(
+      "beforeend",
+      `
       <div class="ab-message-row bot" data-loader-id="${id}">
         <div class="ab-bubble">
           <span class="ab-loader-bubble">
@@ -516,7 +649,8 @@
           </span>
         </div>
       </div>
-    `);
+    `
+    );
 
     scrollBottom_(root);
     return id;
@@ -531,7 +665,7 @@
     const raw = String(markdown || "").trim();
 
     if (!raw) {
-      return `<p>No content available.</p>`;
+      return "<p>No content available.</p>";
     }
 
     const lines = raw.split(/\r?\n/);

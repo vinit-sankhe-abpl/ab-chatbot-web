@@ -53,6 +53,34 @@
       var data = event.data || {};
 
       if (data && data.source === "AB_CHATBOT" && data.type === "close") {
+        /*
+          Native Flutter WebView bridge.
+          Flutter injects ChatbotHost JavaScriptChannel.
+        */
+        try {
+          if (
+            window.ChatbotHost &&
+            typeof window.ChatbotHost.postMessage === "function"
+          ) {
+            window.ChatbotHost.postMessage("close");
+          }
+        } catch (err) { }
+
+        /*
+          Flutter Web / PWA bridge.
+          index.html is loaded inside Flutter HtmlElementView iframe.
+          Forward close event to Flutter web host page.
+        */
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(data, "*");
+          }
+        } catch (err) { }
+
+        /*
+          Normal web behavior.
+          In fullscreen mode close_() already returns without destroying DOM.
+        */
         close_();
       }
     });
@@ -101,10 +129,10 @@
   async function loadBot_() {
     try {
       els.frame.srcdoc = loadingHtml_();
-	  
+
       var loaderUrl = script.src || "";
       var assetBase = loaderUrl ? new URL(".", loaderUrl).href : "";
-      var assetVersion = String(Date.now());	  
+      var assetVersion = String(Date.now());
       var chatbotJsUrl =
         script.getAttribute("data-chatbot-js-url") ||
         assetBase + "ab-chatbot.js?v=" + assetVersion;
@@ -189,144 +217,144 @@
     };
   }
 
-	function injectStyles_() {
-	  if (document.getElementById("ab-chatbot-loader-style")) return;
+  function injectStyles_() {
+    if (document.getElementById("ab-chatbot-loader-style")) return;
 
-	  var style = document.createElement("style");
-	  style.id = "ab-chatbot-loader-style";
+    var style = document.createElement("style");
+    style.id = "ab-chatbot-loader-style";
 
-	  style.textContent = [
+    style.textContent = [
 
-		".ab-bot-panel{",
-		  "position:fixed;",
-		  "right:20px;",
-		  "bottom:92px;",
-		  "width:min(370px,calc(100vw - 32px));",
-		  "height:min(620px,calc(100vh - 120px));",
-		  "height:min(620px,calc(100dvh - 120px));",
-		  "background:#fff;",
-		  "border-radius:18px;",
-		  "box-shadow:0 22px 60px rgba(16,24,40,.28);",
-		  "overflow:hidden;",
-		  "z-index:2147483646;",
-		  "opacity:0;",
-		  "transform:translateY(16px) scale(.98);",
-		  "pointer-events:none;",
-		  "transition:opacity .18s ease,transform .18s ease;",
-		"}",
+      ".ab-bot-panel{",
+      "position:fixed;",
+      "right:20px;",
+      "bottom:92px;",
+      "width:min(370px,calc(100vw - 32px));",
+      "height:min(620px,calc(100vh - 120px));",
+      "height:min(620px,calc(100dvh - 120px));",
+      "background:#fff;",
+      "border-radius:18px;",
+      "box-shadow:0 22px 60px rgba(16,24,40,.28);",
+      "overflow:hidden;",
+      "z-index:2147483646;",
+      "opacity:0;",
+      "transform:translateY(16px) scale(.98);",
+      "pointer-events:none;",
+      "transition:opacity .18s ease,transform .18s ease;",
+      "}",
 
-		".ab-bot-panel-left{left:20px;right:auto;}",
+      ".ab-bot-panel-left{left:20px;right:auto;}",
 
-		".ab-bot-panel.ab-bot-open{",
-		  "opacity:1;",
-		  "transform:translateY(0) scale(1);",
-		  "pointer-events:auto;",
-		"}",
+      ".ab-bot-panel.ab-bot-open{",
+      "opacity:1;",
+      "transform:translateY(0) scale(1);",
+      "pointer-events:auto;",
+      "}",
 
-		".ab-bot-fullscreen{",
-		  "position:fixed!important;",
-		  "inset:0!important;",
-		  "right:auto!important;",
-		  "bottom:auto!important;",
-		  "width:100vw!important;",
-		  "height:100vh!important;",
-		  "height:100dvh!important;",
-		  "border-radius:0!important;",
-		  "box-shadow:none!important;",
-		  "opacity:1!important;",
-		  "transform:none!important;",
-		  "pointer-events:auto!important;",
-		"}",
+      ".ab-bot-fullscreen{",
+      "position:fixed!important;",
+      "inset:0!important;",
+      "right:auto!important;",
+      "bottom:auto!important;",
+      "width:100vw!important;",
+      "height:100vh!important;",
+      "height:100dvh!important;",
+      "border-radius:0!important;",
+      "box-shadow:none!important;",
+      "opacity:1!important;",
+      "transform:none!important;",
+      "pointer-events:auto!important;",
+      "}",
 
-		".ab-bot-frame{",
-		  "display:block;",
-		  "width:100%;",
-		  "height:100%;",
-		  "border:0;",
-		  "background:#fff;",
-		"}",
+      ".ab-bot-frame{",
+      "display:block;",
+      "width:100%;",
+      "height:100%;",
+      "border:0;",
+      "background:#fff;",
+      "}",
 
-		".ab-bot-launcher{",
-		  "position:fixed;",
-		  "right:22px;",
-		  "bottom:22px;",
-		  "width:58px;",
-		  "height:58px;",
-		  "border:0;",
-		  "border-radius:999px;",
-		  "background:#1f8f4d;",
-		  "color:#fff;",
-		  "box-shadow:0 16px 36px rgba(16,24,40,.28);",
-		  "z-index:2147483647;",
-		  "cursor:pointer;",
-		  "display:flex;",
-		  "align-items:center;",
-		  "justify-content:center;",
-		  "font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;",
-		  "font-size:30px;",
-		  "font-weight:800;",
-		  "line-height:1;",
-		  "transition:transform .15s ease,background .15s ease,box-shadow .15s ease;",
-		"}",
+      ".ab-bot-launcher{",
+      "position:fixed;",
+      "right:22px;",
+      "bottom:22px;",
+      "width:58px;",
+      "height:58px;",
+      "border:0;",
+      "border-radius:999px;",
+      "background:#1f8f4d;",
+      "color:#fff;",
+      "box-shadow:0 16px 36px rgba(16,24,40,.28);",
+      "z-index:2147483647;",
+      "cursor:pointer;",
+      "display:flex;",
+      "align-items:center;",
+      "justify-content:center;",
+      "font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;",
+      "font-size:30px;",
+      "font-weight:800;",
+      "line-height:1;",
+      "transition:transform .15s ease,background .15s ease,box-shadow .15s ease;",
+      "}",
 
-		".ab-bot-launcher-left{left:22px;right:auto;}",
+      ".ab-bot-launcher-left{left:22px;right:auto;}",
 
-		".ab-bot-launcher:hover{",
-		  "transform:translateY(-1px);",
-		  "background:#187a41;",
-		  "box-shadow:0 18px 42px rgba(16,24,40,.32);",
-		"}",
+      ".ab-bot-launcher:hover{",
+      "transform:translateY(-1px);",
+      "background:#187a41;",
+      "box-shadow:0 18px 42px rgba(16,24,40,.32);",
+      "}",
 
-		".ab-bot-launcher-active{background:#166534;}",
+      ".ab-bot-launcher-active{background:#166534;}",
 
-		".ab-bot-launcher-icon{display:block;transform:translateY(-1px);}",
+      ".ab-bot-launcher-icon{display:block;transform:translateY(-1px);}",
 
-		"@media(max-width:640px){",
-		  ".ab-bot-panel{",
-			"right:0;",
-			"left:0;",
-			"bottom:0;",
-			"width:100vw;",
-			"height:100vh;",
-			"height:100dvh;",
-			"border-radius:0;",
-			"transform:translateY(100%);",
-		  "}",
+      "@media(max-width:640px){",
+      ".ab-bot-panel{",
+      "right:0;",
+      "left:0;",
+      "bottom:0;",
+      "width:100vw;",
+      "height:100vh;",
+      "height:100dvh;",
+      "border-radius:0;",
+      "transform:translateY(100%);",
+      "}",
 
-		  ".ab-bot-panel-left{left:0;right:0;}",
+      ".ab-bot-panel-left{left:0;right:0;}",
 
-		  ".ab-bot-panel.ab-bot-open{transform:translateY(0);}",
+      ".ab-bot-panel.ab-bot-open{transform:translateY(0);}",
 
-		  ".ab-bot-launcher{right:18px;bottom:18px;}",
+      ".ab-bot-launcher{right:18px;bottom:18px;}",
 
-		  ".ab-bot-launcher-left{left:18px;right:auto;}",
+      ".ab-bot-launcher-left{left:18px;right:auto;}",
 
-		  ".ab-bot-launcher.ab-bot-launcher-active{",
-			"display:none;",
-		  "}",
-		"}"
-	  ].join("");
+      ".ab-bot-launcher.ab-bot-launcher-active{",
+      "display:none;",
+      "}",
+      "}"
+    ].join("");
 
-	  document.head.appendChild(style);
-	}
+    document.head.appendChild(style);
+  }
 
   function loadingHtml_() {
     return [
       "<!doctype html>",
       "<html>",
       "<head>",
-        '<meta charset="utf-8">',
-        '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<style>",
-          "html,body{margin:0;height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8faf9;color:#14532d;}",
-          ".wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;text-align:center;}",
-          ".card{max-width:320px;background:#fff;border:1px solid #d7e7dc;border-radius:16px;padding:20px;box-shadow:0 10px 28px rgba(16,24,40,.08);}",
-          ".title{font-weight:700;margin-bottom:8px;}",
-          ".text{font-size:14px;color:#475467;}",
-        "</style>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      "<style>",
+      "html,body{margin:0;height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8faf9;color:#14532d;}",
+      ".wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;text-align:center;}",
+      ".card{max-width:320px;background:#fff;border:1px solid #d7e7dc;border-radius:16px;padding:20px;box-shadow:0 10px 28px rgba(16,24,40,.08);}",
+      ".title{font-weight:700;margin-bottom:8px;}",
+      ".text{font-size:14px;color:#475467;}",
+      "</style>",
       "</head>",
       "<body>",
-        '<div class="wrap"><div class="card"><div class="title">Loading support assistant</div><div class="text">Preparing chat experience...</div></div></div>',
+      '<div class="wrap"><div class="card"><div class="title">Loading support assistant</div><div class="text">Preparing chat experience...</div></div></div>',
       "</body>",
       "</html>"
     ].join("");
@@ -339,18 +367,18 @@
       "<!doctype html>",
       "<html>",
       "<head>",
-        '<meta charset="utf-8">',
-        '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<style>",
-          "html,body{margin:0;height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff5f5;color:#912018;}",
-          ".wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;}",
-          ".card{max-width:360px;background:#fff;border:1px solid #fecaca;border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(16,24,40,.08);}",
-          ".title{font-weight:700;margin-bottom:8px;}",
-          ".text{font-size:14px;line-height:1.45;word-break:break-word;}",
-        "</style>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      "<style>",
+      "html,body{margin:0;height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff5f5;color:#912018;}",
+      ".wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;}",
+      ".card{max-width:360px;background:#fff;border:1px solid #fecaca;border-radius:16px;padding:18px;box-shadow:0 10px 28px rgba(16,24,40,.08);}",
+      ".title{font-weight:700;margin-bottom:8px;}",
+      ".text{font-size:14px;line-height:1.45;word-break:break-word;}",
+      "</style>",
       "</head>",
       "<body>",
-        '<div class="wrap"><div class="card"><div class="title">Support assistant could not load</div><div class="text">' + message + "</div></div></div>",
+      '<div class="wrap"><div class="card"><div class="title">Support assistant could not load</div><div class="text">' + message + "</div></div></div>",
       "</body>",
       "</html>"
     ].join("");

@@ -104,6 +104,12 @@ body {
   color: #ffffff;
 }
 
+/* Body area behind chips */
+.ab-suggestions-body,
+.ab-suggested-questions-body {
+  background: #f3fbf6;
+}
+
 .ab-suggested-row {
   padding: 0 12px 10px;
   display: flex;
@@ -379,5 +385,59 @@ body {
 .ab-chat-clear:focus-visible {
   background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
+  outline: none;
+}
+
+/* Sales/contact action links */
+
+.ab-sales-chip {
+  background: #e8f7ee;
+  border-color: #b7e4c7;
+  color: #166534;
+}
+
+.ab-sales-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ab-sales-message {
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ab-sales-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ab-action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #b7e4c7;
+  background: #e8f7ee;
+  color: #166534;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  line-height: 1.15;
+  font-weight: 700;
+  text-decoration: none;
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ab-action-link:hover,
+.ab-action-link:focus,
+.ab-action-link:focus-visible {
+  background: #d9f2e2;
+  border-color: #1f8f4d;
+  color: #14532d;
   outline: none;
 }
