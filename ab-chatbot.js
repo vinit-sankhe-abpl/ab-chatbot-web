@@ -29,8 +29,18 @@
       contexts: cfg.contexts,
       history: [],
       selectedChunks: [],
+
+      /*
+        Single latest image upload only.
+        Cleared when chat is cleared.
+        Sent to Jira only when Raise Ticket is clicked.
+      */
+      uploadedImage: null,
+      uploadedImageMessageEl: null,
+
       lastMatches: [],
       isAsking: false,
+      isUploading: false,
       suggestionsCollapsed: false,
       hasShownReadyMessage: false
     };
@@ -98,12 +108,32 @@
         </div>
 
         <div class="ab-chat-footer">
-          <input
-            class="ab-input"
-            type="text"
-            placeholder="${escapeHtml_(cfg.placeholder || "Ask a question...")}"
-            data-ab-input
-          />
+          <div class="ab-input-wrap">
+            <button
+              class="ab-upload-button"
+              type="button"
+              data-ab-upload
+              aria-label="Upload image"
+              title="Upload image"
+            >
+              +
+            </button>
+
+            <input
+              class="ab-file-input"
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              data-ab-file
+            />
+
+            <input
+              class="ab-input"
+              type="text"
+              placeholder="${escapeHtml_(cfg.placeholder || "Ask a question...")}"
+              data-ab-input
+            />
+          </div>
+
           <button class="ab-send-button" type="button" data-ab-send>
             ${escapeHtml_(cfg.sendLabel || "Send")}
           </button>
@@ -151,6 +181,8 @@
   function bindEvents_(root, state) {
     const input = root.querySelector("[data-ab-input]");
     const send = root.querySelector("[data-ab-send]");
+    const upload = root.querySelector("[data-ab-upload]");
+    const fileInput = root.querySelector("[data-ab-file]");
 
     send.addEventListener("click", function () {
       ask_(root, state);
@@ -161,6 +193,23 @@
         ask_(root, state);
       }
     });
+
+    if (upload && fileInput) {
+      upload.addEventListener("click", function () {
+        if (state.isUploading || state.isAsking) return;
+
+        fileInput.value = "";
+        fileInput.click();
+      });
+
+      fileInput.addEventListener("change", function () {
+        const file = fileInput.files && fileInput.files[0];
+
+        if (file) {
+          uploadImage_(root, state, file);
+        }
+      });
+    }
 
     root.querySelectorAll("[data-ab-suggestion]").forEach(function (button) {
       button.addEventListener("click", function () {
@@ -221,8 +270,12 @@
 
     state.history = [];
     state.selectedChunks = [];
+
+    clearUploadedImageState_(state);
+
     state.lastMatches = [];
     state.isAsking = false;
+    state.isUploading = false;
     state.hasShownReadyMessage = false;
 
     body.innerHTML = renderDefaultBanner_();
@@ -232,6 +285,7 @@
 
     const input = root.querySelector("[data-ab-input]");
     const send = root.querySelector("[data-ab-send]");
+    const upload = root.querySelector("[data-ab-upload]");
 
     if (input) {
       input.disabled = false;
@@ -242,6 +296,21 @@
     if (send) {
       send.disabled = false;
     }
+
+    if (upload) {
+      upload.disabled = false;
+    }
+  }
+
+  function clearUploadedImageState_(state) {
+    if (state.uploadedImage && state.uploadedImage.previewUrl) {
+      try {
+        URL.revokeObjectURL(state.uploadedImage.previewUrl);
+      } catch (err) {}
+    }
+
+    state.uploadedImage = null;
+    state.uploadedImageMessageEl = null;
   }
 
   function showReadyMessageOnce_(root, state) {
@@ -268,7 +337,7 @@
   }
 
   async function ask_(root, state) {
-    if (state.isAsking) return;
+    if (state.isAsking || state.isUploading) return;
 
     const input = root.querySelector("[data-ab-input]");
     const send = root.querySelector("[data-ab-send]");
@@ -396,9 +465,9 @@
     const label = actionChip.label || "Raise a ticket";
     const type = actionChip.type || "ticket";
 
-    if (type === "sales") {
+    if (type === "sales" || type === "support_email") {
       return `
-        <button class="ab-ticket-chip ab-sales-chip" type="button" data-ab-sales>
+        <button class="ab-ticket-chip ab-sales-chip" type="button" data-ab-contact-actions>
           ${escapeHtml_(label)}
         </button>
       `;
@@ -416,12 +485,12 @@
       return;
     }
 
-    if (actionChip.type === "sales") {
-      const sales = row.querySelector("[data-ab-sales]");
+    if (actionChip.type === "sales" || actionChip.type === "support_email") {
+      const contact = row.querySelector("[data-ab-contact-actions]");
 
-      if (sales) {
-        sales.addEventListener("click", function () {
-          renderSalesActions_(root, actionChip);
+      if (contact) {
+        contact.addEventListener("click", function () {
+          renderContactActions_(root, actionChip);
         });
       }
 
@@ -441,7 +510,7 @@
     }
   }
 
-  function renderSalesActions_(root, actionChip) {
+  function renderContactActions_(root, actionChip) {
     const actions = Array.isArray(actionChip.actions) ? actionChip.actions : [];
 
     const message =
@@ -547,6 +616,204 @@
     scrollBottom_(root);
   }
 
+  async function uploadImage_(root, state, file) {
+    if (!file) return;
+    if (state.isUploading || state.isAsking) return;
+
+    const allowedTypes = [
+      "image/png",
+      "image/jpeg",
+      "image/jpg",
+      "image/webp",
+      "image/gif"
+    ];
+
+    if (allowedTypes.indexOf(file.type) === -1) {
+      addBotMessage_(
+        root,
+        "Only PNG, JPG, JPEG, WEBP, and GIF images can be uploaded.",
+        true
+      );
+      return;
+    }
+
+    const maxBytes = 5 * 1024 * 1024;
+
+    if (file.size > maxBytes) {
+      addBotMessage_(
+        root,
+        "Image is too large. Please upload an image up to 5 MB.",
+        true
+      );
+      return;
+    }
+
+    const uploadButton = root.querySelector("[data-ab-upload]");
+    const sendButton = root.querySelector("[data-ab-send]");
+    const loaderId = addLoader_(root, "Uploading image");
+
+    state.isUploading = true;
+
+    if (uploadButton) {
+      uploadButton.disabled = true;
+    }
+
+    if (sendButton) {
+      sendButton.disabled = true;
+    }
+
+    /*
+      Only one uploaded image is allowed.
+      When another image is selected, old preview and old session image are silently replaced.
+      No alert is shown because the UI label says "Max 1".
+    */
+    if (state.uploadedImage) {
+      if (state.uploadedImageMessageEl) {
+        try {
+          state.uploadedImageMessageEl.remove();
+        } catch (err) {}
+
+        state.uploadedImageMessageEl = null;
+      }
+
+      if (state.uploadedImage.previewUrl) {
+        try {
+          URL.revokeObjectURL(state.uploadedImage.previewUrl);
+        } catch (err) {}
+      }
+
+      state.uploadedImage = null;
+    }
+
+    let localPreviewUrl = "";
+
+    try {
+      localPreviewUrl = URL.createObjectURL(file);
+
+      const base64 = await fileToBase64_(file);
+
+      const response = await callGas_(state.gasUrl, {
+        action: "upload_image",
+        token: state.token || "",
+        orgId: state.orgId,
+        userId: state.userId,
+        userName: state.userName,
+        userEmail: state.userEmail,
+        contexts: state.contexts,
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        base64: base64
+      });
+
+      removeLoader_(root, loaderId);
+
+      if (!response.ok) {
+        if (localPreviewUrl) {
+          try {
+            URL.revokeObjectURL(localPreviewUrl);
+          } catch (err) {}
+        }
+
+        addBotMessage_(root, response.error || "Could not upload image.", true);
+        return;
+      }
+
+      state.uploadedImage = {
+        fileId: response.fileId || "",
+        fileName: response.fileName || file.name,
+        mimeType: response.mimeType || file.type,
+        sizeBytes: response.sizeBytes || file.size,
+        url: response.url || "",
+        downloadUrl: response.downloadUrl || "",
+        previewUrl: localPreviewUrl
+      };
+
+      state.uploadedImageMessageEl = addUploadedImagePreview_(
+        root,
+        state.uploadedImage
+      );
+    } catch (err) {
+      removeLoader_(root, loaderId);
+
+      if (localPreviewUrl) {
+        try {
+          URL.revokeObjectURL(localPreviewUrl);
+        } catch (revokeErr) {}
+      }
+
+      addBotMessage_(root, err.message || String(err), true);
+    } finally {
+      state.isUploading = false;
+
+      if (uploadButton) {
+        uploadButton.disabled = false;
+      }
+
+      if (sendButton) {
+        sendButton.disabled = false;
+      }
+    }
+  }
+
+  function fileToBase64_(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+
+      reader.onload = function () {
+        const result = String(reader.result || "");
+        const commaIndex = result.indexOf(",");
+
+        if (commaIndex === -1) {
+          reject(new Error("Could not read image file."));
+          return;
+        }
+
+        resolve(result.slice(commaIndex + 1));
+      };
+
+      reader.onerror = function () {
+        reject(new Error("Could not read image file."));
+      };
+
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function addUploadedImagePreview_(root, file) {
+    const body = root.querySelector("[data-ab-body]");
+
+    /*
+      Prefer direct Drive content/download URL.
+      Fallback to normal Drive file URL.
+    */
+    const downloadUrl = file.downloadUrl || file.url || "";
+
+    const row = document.createElement("div");
+    row.className = "ab-message-row user ab-upload-preview-row";
+
+    row.innerHTML = `
+      <div class="ab-upload-preview-card">
+        <div class="ab-upload-preview-title">
+          Image Uploaded (Max 1):
+        </div>
+
+        ${
+          downloadUrl
+            ? `<a class="ab-action-link ab-upload-download-button" href="${escapeAttr_(downloadUrl)}" target="_blank" rel="noopener">
+                Download
+              </a>`
+            : `<div class="ab-upload-preview-name">Image uploaded.</div>`
+        }
+      </div>
+    `;
+
+    body.appendChild(row);
+    scrollBottom_(root);
+
+    return row;
+  }
+
   async function raiseTicket_(root, state) {
     const loaderId = addLoader_(root, "Creating support ticket");
 
@@ -560,7 +827,8 @@
         userEmail: state.userEmail,
         contexts: state.contexts,
         history: state.history,
-        selectedChunks: state.selectedChunks
+        selectedChunks: state.selectedChunks,
+        uploadedImage: sanitizeUploadedImageForTicket_(state.uploadedImage)
       });
 
       removeLoader_(root, loaderId);
@@ -581,6 +849,21 @@
       removeLoader_(root, loaderId);
       addBotMessage_(root, err.message || String(err), true);
     }
+  }
+
+  function sanitizeUploadedImageForTicket_(image) {
+    if (!image) {
+      return null;
+    }
+
+    return {
+      fileId: image.fileId || "",
+      fileName: image.fileName || "",
+      mimeType: image.mimeType || "",
+      sizeBytes: image.sizeBytes || "",
+      url: image.url || "",
+      downloadUrl: image.downloadUrl || ""
+    };
   }
 
   async function callGas_(url, payload) {

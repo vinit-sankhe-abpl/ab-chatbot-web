@@ -1,6 +1,242 @@
 (function () {
   var script = document.currentScript;
+  debugger;
 
+  /*
+    Public manual bootstrap API.
+
+    Usage from a sales website:
+
+    <script src="https://cdn.example.com/ab-chatbot-loader.js"></script>
+    <script>
+      bootstrapBot({
+        gasUrlId: "AKfycbw82Tyjzyxzh_SO2k2AiaTeyEhVQdbXwR4_Pv-UjR66dRGn2UOh55-Yg78bb41bfiTkZQ",
+        logoUrl: "https://cdn.example.com/ander-baher-logo-round.png",
+        position: "bottom-right",
+        offsetX: 24,
+        offsetY: 24
+      });
+    </script>
+  */
+  window.bootstrapBot = function (options) {
+    options = options || {};
+
+    var gasUrl =
+      String(options.gasUrl || "").trim() ||
+      buildGasExecUrl_(
+        options.gasUrlId ||
+        options.scriptId ||
+        options.endpointId ||
+        ""
+      );
+
+    if (!gasUrl) {
+      console.error("[AB Chatbot] bootstrapBot requires gasUrl or gasUrlId.");
+      return null;
+    }
+
+    var logoUrl = String(options.logoUrl || "").trim();
+
+    if (!logoUrl) {
+      console.error("[AB Chatbot] bootstrapBot requires logoUrl.");
+      return null;
+    }
+
+    var botCfg = {
+      gasUrl: gasUrl,
+      orgId: String(options.orgId || "Guest"),
+      userId: String(options.userId || "Guest"),
+      userName: String(options.userName || "Guest"),
+      userEmail: String(options.userEmail || ""),
+      contexts: String(options.contexts || "sales"),
+      title: String(options.title || "Support Assistant"),
+      chatbotJsUrl: String(options.chatbotJsUrl || ""),
+      chatbotCssUrl: String(options.chatbotCssUrl || "")
+    };
+
+    var position = String(options.position || "bottom-right")
+      .trim()
+      .toLowerCase();
+
+    var allowedPositions = {
+      "top-right": true,
+      "top-left": true,
+      "bottom-right": true,
+      "bottom-left": true
+    };
+
+    if (!allowedPositions[position]) {
+      position = "bottom-right";
+    }
+
+    var offsetX = toCssPx_(options.offsetX, 22);
+    var offsetY = toCssPx_(options.offsetY, 22);
+    var buttonSize = toCssPx_(options.buttonSize, 58);
+
+    var panelGap = toCssPx_(options.panelGap, 14);
+
+    var panelWidth = String(
+      options.panelWidth || "min(370px, calc(100vw - 32px))"
+    );
+
+    var panelHeight = String(
+      options.panelHeight || "min(620px, calc(100vh - 120px))"
+    );
+
+    var zIndex = Number(options.zIndex || 2147483647);
+
+    var isOpen = false;
+    var hasLoaded = false;
+
+    injectBootstrapBotStyles_();
+
+    var panel = document.createElement("div");
+    panel.className = "ab-bootstrap-panel";
+
+    var frame = document.createElement("iframe");
+    frame.className = "ab-bootstrap-frame";
+    frame.title = botCfg.title;
+    frame.setAttribute("allow", "clipboard-write");
+    frame.setAttribute("scrolling", "yes");
+
+    panel.appendChild(frame);
+
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "ab-bootstrap-button";
+    button.setAttribute("aria-label", "Open support assistant");
+
+    /*
+      Logo-only round button.
+      No question mark, no text, no extra visible content.
+    */
+    button.innerHTML =
+      '<img class="ab-bootstrap-logo" src="' +
+      escapeHtml_(logoUrl) +
+      '" alt="">';
+
+    applyBootstrapPosition_({
+      panel: panel,
+      button: button,
+      position: position,
+      offsetX: offsetX,
+      offsetY: offsetY,
+      buttonSize: buttonSize,
+      panelGap: panelGap,
+      panelWidth: panelWidth,
+      panelHeight: panelHeight,
+      zIndex: zIndex
+    });
+
+    ready_(function () {
+      document.body.appendChild(panel);
+      document.body.appendChild(button);
+    });
+
+    button.addEventListener("click", function () {
+      if (isOpen) {
+        close();
+      } else {
+        open();
+      }
+    });
+
+    window.addEventListener("message", function (event) {
+      var data = event.data || {};
+
+      if (data && data.source === "AB_CHATBOT" && data.type === "close") {
+        close();
+      }
+    });
+
+    function open() {
+      isOpen = true;
+
+      panel.classList.add("ab-bootstrap-open");
+      button.classList.add("ab-bootstrap-button-active");
+
+      if (!hasLoaded) {
+        hasLoaded = true;
+        loadEmbeddedBot_();
+      }
+    }
+
+    function close() {
+      isOpen = false;
+
+      panel.classList.remove("ab-bootstrap-open");
+      button.classList.remove("ab-bootstrap-button-active");
+    }
+
+    async function loadEmbeddedBot_() {
+      try {
+        frame.srcdoc = loadingHtml_();
+
+        var loaderUrl = script && script.src ? script.src : "";
+        var assetBase = loaderUrl ? new URL(".", loaderUrl).href : "";
+        var assetVersion = String(Date.now());
+
+        var chatbotJsUrl =
+          botCfg.chatbotJsUrl ||
+          assetBase + "ab-chatbot.js?v=" + assetVersion;
+
+        var chatbotCssUrl =
+          botCfg.chatbotCssUrl ||
+          assetBase + "ab-chatbot.css?v=" + assetVersion;
+
+        var html = await fetchGasHtml_(botCfg.gasUrl, {
+          action: "embed",
+          orgId: botCfg.orgId,
+          userId: botCfg.userId,
+          userName: botCfg.userName,
+          userEmail: botCfg.userEmail,
+          contexts: botCfg.contexts,
+          title: botCfg.title,
+          chatbotJsUrl: chatbotJsUrl,
+          chatbotCssUrl: chatbotCssUrl
+        });
+
+        if (!html || !html.trim()) {
+          throw new Error("GAS returned empty chatbot HTML.");
+        }
+
+        /*
+          Direct chatbot UI load.
+          This does not load index.html.
+        */
+        frame.srcdoc = html;
+      } catch (err) {
+        console.error("[AB Chatbot]", err);
+        frame.srcdoc = errorHtml_(err);
+      }
+    }
+
+    function destroy() {
+      try {
+        panel.remove();
+      } catch (err) {}
+
+      try {
+        button.remove();
+      } catch (err) {}
+    }
+
+    return {
+      open: open,
+      close: close,
+      destroy: destroy,
+      panel: panel,
+      button: button,
+      frame: frame
+    };
+  };
+
+
+  /*
+    Existing auto-boot mode.
+
+    This keeps your current script data-attribute integration working.
+  */
   if (!script) {
     console.error("[AB Chatbot] Loader could not find current script.");
     return;
@@ -20,7 +256,9 @@
   };
 
   if (!cfg.gasUrl) {
-    console.error("[AB Chatbot] Missing gasUrl.");
+    console.info(
+      "[AB Chatbot] No auto-boot config like gasUrl etc. found. This is allowed if the host page wants to call bootstrapBot({...}) manually."
+    );
     return;
   }
 
@@ -64,7 +302,7 @@
           ) {
             window.ChatbotHost.postMessage("close");
           }
-        } catch (err) { }
+        } catch (err) {}
 
         /*
           Flutter Web / PWA bridge.
@@ -75,7 +313,7 @@
           if (window.parent && window.parent !== window) {
             window.parent.postMessage(data, "*");
           }
-        } catch (err) { }
+        } catch (err) {}
 
         /*
           Normal web behavior.
@@ -133,9 +371,11 @@
       var loaderUrl = script.src || "";
       var assetBase = loaderUrl ? new URL(".", loaderUrl).href : "";
       var assetVersion = String(Date.now());
+
       var chatbotJsUrl =
         script.getAttribute("data-chatbot-js-url") ||
         assetBase + "ab-chatbot.js?v=" + assetVersion;
+
       var chatbotCssUrl =
         script.getAttribute("data-chatbot-css-url") ||
         assetBase + "ab-chatbot.css?v=" + assetVersion;
@@ -157,7 +397,6 @@
       }
 
       els.frame.srcdoc = html;
-
     } catch (err) {
       console.error("[AB Chatbot]", err);
       els.frame.srcdoc = errorHtml_(err);
@@ -224,7 +463,6 @@
     style.id = "ab-chatbot-loader-style";
 
     style.textContent = [
-
       ".ab-bot-panel{",
       "position:fixed;",
       "right:20px;",
@@ -338,6 +576,185 @@
     document.head.appendChild(style);
   }
 
+  function injectBootstrapBotStyles_() {
+    if (document.getElementById("ab-bootstrap-bot-style")) {
+      return;
+    }
+
+    var style = document.createElement("style");
+    style.id = "ab-bootstrap-bot-style";
+
+    style.textContent = [
+      ".ab-bootstrap-panel{",
+      "position:fixed;",
+      "background:#fff;",
+      "border-radius:18px;",
+      "box-shadow:0 22px 60px rgba(16,24,40,.28);",
+      "overflow:hidden;",
+      "opacity:0;",
+      "transform:translateY(16px) scale(.98);",
+      "pointer-events:none;",
+      "transition:opacity .18s ease,transform .18s ease;",
+      "}",
+
+      ".ab-bootstrap-panel.ab-bootstrap-open{",
+      "opacity:1;",
+      "transform:translateY(0) scale(1);",
+      "pointer-events:auto;",
+      "}",
+
+      ".ab-bootstrap-frame{",
+      "display:block;",
+      "width:100%;",
+      "height:100%;",
+      "border:0;",
+      "background:#fff;",
+      "overflow:auto;",
+      "}",
+
+      ".ab-bootstrap-button{",
+      "position:fixed;",
+      "border:0;",
+      "border-radius:999px;",
+      "background:#fff;",
+      "box-shadow:0 12px 30px rgba(16,24,40,.24);",
+      "cursor:pointer;",
+      "display:flex;",
+      "align-items:center;",
+      "justify-content:center;",
+      "padding:0;",
+      "overflow:hidden;",
+      "box-sizing:border-box;",
+      "transition:transform .15s ease,box-shadow .15s ease;",
+      "}",
+
+      ".ab-bootstrap-button:hover{",
+      "transform:translateY(-1px);",
+      "box-shadow:0 16px 38px rgba(16,24,40,.3);",
+      "}",
+
+      ".ab-bootstrap-button-active{",
+      "transform:translateY(-1px);",
+      "}",
+
+      ".ab-bootstrap-logo{",
+      "width:100%;",
+      "height:100%;",
+      "display:block;",
+      "object-fit:cover;",
+      "border-radius:999px;",
+      "}",
+
+      "@media(max-width:640px){",
+      ".ab-bootstrap-panel{",
+      "left:0!important;",
+      "right:0!important;",
+      "bottom:0!important;",
+      "top:auto!important;",
+      "width:100vw!important;",
+      "height:100vh!important;",
+      "height:100dvh!important;",
+      "border-radius:0!important;",
+      "transform:translateY(100%);",
+      "}",
+
+      ".ab-bootstrap-panel.ab-bootstrap-open{",
+      "transform:translateY(0);",
+      "}",
+
+      ".ab-bootstrap-button.ab-bootstrap-button-active{",
+      "display:none;",
+      "}",
+      "}"
+    ].join("");
+
+    document.head.appendChild(style);
+  }
+
+  function applyBootstrapPosition_(args) {
+    var panel = args.panel;
+    var button = args.button;
+    var position = args.position;
+    var offsetX = args.offsetX;
+    var offsetY = args.offsetY;
+    var buttonSize = args.buttonSize;
+    var panelGap = args.panelGap;
+    var panelWidth = args.panelWidth;
+    var panelHeight = args.panelHeight;
+    var zIndex = args.zIndex;
+
+    button.style.width = buttonSize;
+    button.style.height = buttonSize;
+    button.style.zIndex = String(zIndex);
+
+    panel.style.width = panelWidth;
+    panel.style.height = panelHeight;
+    panel.style.zIndex = String(zIndex - 1);
+
+    var isTop = position.indexOf("top-") === 0;
+    var isBottom = position.indexOf("bottom-") === 0;
+    var isLeft = position.indexOf("-left") > -1;
+    var isRight = position.indexOf("-right") > -1;
+
+    if (isTop) {
+      button.style.top = offsetY;
+      panel.style.top =
+        "calc(" + offsetY + " + " + buttonSize + " + " + panelGap + ")";
+    }
+
+    if (isBottom) {
+      button.style.bottom = offsetY;
+      panel.style.bottom =
+        "calc(" + offsetY + " + " + buttonSize + " + " + panelGap + ")";
+    }
+
+    if (isLeft) {
+      button.style.left = offsetX;
+      panel.style.left = offsetX;
+    }
+
+    if (isRight) {
+      button.style.right = offsetX;
+      panel.style.right = offsetX;
+    }
+  }
+
+  function buildGasExecUrl_(id) {
+    id = String(id || "").trim();
+
+    if (!id) {
+      return "";
+    }
+
+    if (/^https?:\/\//i.test(id)) {
+      return id;
+    }
+
+    return (
+      "https://script.google.com/macros/s/" +
+      encodeURIComponent(id) +
+      "/exec"
+    );
+  }
+
+  function toCssPx_(value, fallback) {
+    if (value === null || value === undefined || value === "") {
+      return fallback + "px";
+    }
+
+    if (typeof value === "number") {
+      return value + "px";
+    }
+
+    value = String(value).trim();
+
+    if (/^\d+(\.\d+)?$/.test(value)) {
+      return value + "px";
+    }
+
+    return value;
+  }
+
   function loadingHtml_() {
     return [
       "<!doctype html>",
@@ -378,7 +795,9 @@
       "</style>",
       "</head>",
       "<body>",
-      '<div class="wrap"><div class="card"><div class="title">Support assistant could not load</div><div class="text">' + message + "</div></div></div>",
+      '<div class="wrap"><div class="card"><div class="title">Support assistant could not load</div><div class="text">' +
+        message +
+        "</div></div></div>",
       "</body>",
       "</html>"
     ].join("");
