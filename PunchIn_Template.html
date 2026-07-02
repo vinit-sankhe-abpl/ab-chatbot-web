@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Attendance Reminder - Punch-in Pending</title>
+  </head>
+
+  <body style="margin:0; padding:0; background:#f6f8fb; font-family:Arial, Helvetica, sans-serif; color:#1f2937;">
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">
+      Your punch-in is pending.
+    </div>
+
+    <div style="max-width:600px; margin:0 auto; padding:16px 12px;">
+      <div style="background:#ffffff; border:1px solid #edf0f4; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(16,24,40,0.04);">
+
+        <div style="padding:16px 16px; border-bottom:1px solid #eef2f6;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+            <tr>
+              <td style="width:42px; vertical-align:middle;">
+                <div style="width:42px; height:42px; border-radius:12px; background:#dcfce7; text-align:center; line-height:42px; overflow:hidden;">
+                  <img src="https://app.anderbaher.com/ab-chatbot/resources/AB_Ico32x32.png" alt="Ander Baher" width="34" height="34" style="display:inline-block; vertical-align:middle; border:0; outline:none; text-decoration:none; max-width:34px; max-height:34px;">
+                </div>
+              </td>
+              <td style="vertical-align:middle; padding-left:10px;">
+                <div style="font-size:13px; color:#667085; line-height:1.25;">Ander Baher</div>
+                <div style="font-size:19px; color:#111827; font-weight:700; line-height:1.25;">Attendance Reminder</div>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="padding:20px 18px 22px;">
+          <div style="margin-bottom:14px;">
+            <span style="display:inline-block; background:#eaf8ef; color:#28865a; border:1px solid #ccefd8; border-radius:999px; padding:5px 10px; font-size:11px; font-weight:700; letter-spacing:0.2px;">
+              PUNCH-IN PENDING
+            </span>
+          </div>
+
+          <div style="font-size:24px; line-height:1.22; font-weight:700; color:#111827; margin-bottom:12px;">
+            Your punch-in is pending
+          </div>
+
+          <p style="font-size:15px; line-height:1.5; color:#344054; margin:0 0 10px;">
+            Hi {{USER_NAME}},
+          </p>
+
+          <p style="font-size:15px; line-height:1.5; color:#344054; margin:0 0 16px;">
+            Your shift began a while back. It looks like you may have missed your <strong>punch-in</strong> today.
+          </p>
+
+          <a href="{{APP_LINK}}" target="_blank" style="display:block; background:#61bd7b; color:#ffffff; text-decoration:none; padding:14px 16px; border-radius:12px; font-size:16px; font-weight:700; text-align:center; margin:0 0 16px; line-height:1.25;">
+            Open Attendance App
+          </a>
+
+          <div style="background:#f8fafc; border:1px solid #eaecf0; border-radius:14px; padding:14px; margin:0 0 16px;">
+            <div style="font-size:11px; color:#98a2b3; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; margin-bottom:4px;">
+              Organisation
+            </div>
+            <div style="font-size:16px; line-height:1.35; color:#111827; font-weight:700; margin-bottom:12px;">
+              {{ORG_NAME}}
+            </div>
+
+            <div style="font-size:11px; color:#98a2b3; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; margin-bottom:4px;">
+              Shift Start Time
+            </div>
+            <div style="font-size:17px; line-height:1.35; color:#111827; font-weight:700;">
+              {{SHIFT_START_TIME}}
+            </div>
+          </div>
+
+          <ul style="font-size:13px; line-height:1.5; color:#667085; margin:0 0 18px; padding-left:18px;">
+            <li style="margin:0 0 6px;">
+              If you have already marked your punch-in, please ignore this reminder.
+            </li>
+            <li style="margin:0;">
+              Please contact your organisational admin for queries related to your organisation&apos;s attendance policy.
+            </li>
+          </ul>
+
+          <p style="font-size:14px; line-height:1.5; color:#344054; margin:0;">
+            Regards,<br>
+            <strong>Ander Baher</strong>
+          </p>
+        </div>
+
+        <div style="padding:14px 18px; background:#fbfcfd; border-top:1px solid #eef2f6; font-size:12px; color:#667085; line-height:1.5;">
+          This is an automated attendance notification. For support, contact
+          <a href="mailto:{{SUPPORT_EMAIL}}" style="color:#16834f; text-decoration:none;">{{SUPPORT_EMAIL}}</a>.
+        </div>
+
+      </div>
+
+      <div style="text-align:center; font-size:11px; color:#98a2b3; margin-top:10px;">
+        © Ander Baher
+      </div>
+    </div>
+  </body>
+</html>
